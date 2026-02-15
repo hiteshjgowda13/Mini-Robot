@@ -4,9 +4,11 @@
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
+#define BUZZER_PIN 4
 
 #define epd_bitmap_logo_width 64
 #define epd_bitmap_logo_height 32
+
 
 // 'logo', 64x32px
 const unsigned char epd_bitmap_logo [] PROGMEM = {
@@ -33,55 +35,96 @@ const int epd_bitmap_allArray_LEN = 1;
 const unsigned char* epd_bitmap_allArray[1] = {
 	epd_bitmap_logo
 };
-
-
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 int targetY = 24;
-
-// X positions centered as group
 int positions[5] = {34, 46, 58, 70, 82};
 char letters[5] = {'N','H','K','S','S'};
-
 void setup() {
-  Wire.begin(8, 9); // SDA=8, SCL=9
+
+  Wire.begin(8, 9);
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+
+  // Attach buzzer FIRST (ESP32-C3 style)
+  ledcAttach(BUZZER_PIN, 2000, 8);
 
   // ===== PHASE 1: White Screen =====
   display.fillScreen(SSD1306_WHITE);
   display.display();
   delay(2000);
 
-  // ===== PHASE 2: Drop Letters One by One =====
+  introPowerOn();
+
+  // ===== PHASE 2: Drop Letters =====
   for (int i = 0; i < 5; i++) {
     dropLetter(i);
   }
-  
-// Small pause after logo forms
+
   delay(500);
 
-// PHASE 3 - Black spreads from center
+  // ===== PHASE 3: Black Spread =====
+  blackoutSound();
   centerBlackSpread();
 
   delay(300);
 
+  // ===== LOGO =====
   display.clearDisplay();
 
-display.drawBitmap(
-  (SCREEN_WIDTH - epd_bitmap_logo_width) / 2,
-  (SCREEN_HEIGHT - epd_bitmap_logo_height) / 2,
-  epd_bitmap_logo,
-  epd_bitmap_logo_width,
-  epd_bitmap_logo_height,
-  SSD1306_WHITE
-);
-
-
+  display.drawBitmap(
+    (SCREEN_WIDTH - epd_bitmap_logo_width) / 2,
+    (SCREEN_HEIGHT - epd_bitmap_logo_height) / 2,
+    epd_bitmap_logo,
+    epd_bitmap_logo_width,
+    epd_bitmap_logo_height,
+    SSD1306_WHITE
+  );
 
   display.display();
-
+  logoRevealSound();
+}
+void toneBeep(int freq, int duration) {
+  ledcWriteTone(BUZZER_PIN, freq);
+  delay(duration);
+  ledcWriteTone(BUZZER_PIN, 0);
+  delay(20);
 }
 
+void introPowerOn() {
+  toneBeep(523, 100);
+  toneBeep(659, 100);
+  toneBeep(784, 150);
+}
+
+void playLetterSound(char letter) {
+  switch(letter) {
+    case 'N': toneBeep(784, 120); break;
+    case 'H': toneBeep(880, 120); break;
+    case 'K': toneBeep(1046, 120); break;
+    case 'S': toneBeep(1174, 120); break;
+  }
+}
+
+void blackoutSound() {
+  for (int f = 1300; f >= 400; f -= 40) {
+    ledcWriteTone(BUZZER_PIN, f);
+    delay(10);
+  }
+  ledcWriteTone(BUZZER_PIN, 0);
+}
+
+void logoRevealSound() {
+  toneBeep(1046, 150);
+  toneBeep(1318, 150);
+  toneBeep(1567, 250);
+
+  for (int f = 1500; f >= 300; f -= 20) {
+    ledcWriteTone(BUZZER_PIN, f);
+    delay(8);
+  }
+
+  ledcWriteTone(BUZZER_PIN, 0);
+}
 void loop() {
 }
 
@@ -102,10 +145,8 @@ void dropLetter(int index) {
     display.clearDisplay();
     display.fillScreen(SSD1306_WHITE);
 
-    // draw already dropped letters
     drawFixedLetters(index);
 
-    // draw falling letter
     display.setTextSize(2);
     display.setTextColor(SSD1306_BLACK, SSD1306_WHITE);
     display.setCursor(positions[index], y);
@@ -115,15 +156,16 @@ void dropLetter(int index) {
     delay(15);
   }
 
+  playLetterSound(letters[index]);
   delay(200);
 }
+
 void centerBlackSpread() {
 
   int centerX = SCREEN_WIDTH / 2;
   int centerY = SCREEN_HEIGHT / 2;
 
   for (int r = 0; r < 80; r++) {
-
     display.fillCircle(centerX, centerY, r, SSD1306_BLACK);
     display.display();
     delay(10);
